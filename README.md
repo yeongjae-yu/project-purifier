@@ -26,7 +26,7 @@ Purifier 서비스는 [google mutilingual BERT model](https://github.com/google-
 - Google BERT-base multilingual pre-trained 모델 사용.
 - 추가 pre-training을 위한 300만 구어체 문장 수집
 - fine-tunning을 위한 10만개의 댓글 수집.
- 
+
 #### 1.2. 데이터 전처리 및 라벨링
 - 구어체 문장 tokenize를 위한 vocab.txt 수정 (기존 multilingual 버전으로는 토크나이징 불가)
 - 이모티콘 제거 및 데이터 전처리
@@ -35,25 +35,25 @@ Purifier 서비스는 [google mutilingual BERT model](https://github.com/google-
 > 비속어 욕설은 무조건 1,
 > 부모 관련 욕설(aka 패드립), 충분히 순화가 가능하나 남을 비하하려는 의도의 과격한 표현,
 > 지역 갈등을 조장하는 표현, 부정적인 프레임을 씌우는 용어를 욕설로 판단.
- 
+
 #### 1.3. 욕설 학습 및 모델 선정
 - 기존 multilingual 모델에 300만 구어체 문장 추가 학습.
 - (구글 BERT tensorflow 코드 사용)
 - 기 학습된 pretrained 모델별 fine-tuning
 - 학습 완료된 모델 별 정확도 비교 후 모델 선정 (욕설 판단만 가능한 상태)
- 
+
 #### 1.4. 마스킹을 위한 추가 모델링 설계 및 마스킹 알고리즘 설계
 - tensorflow -> pytorch로 전환(pre-trained model 또한 변환)
 > 코드 추가 및 변경의 편리함, bertviz를 사용하기 위함
 - 형태소별 욕설 여부 라벨링 없이 욕설 위치 파악을 위한 puri attention layer 추가
 - Token 단위 확률 비교를 통한 마스킹 알고리즘 구현
 - 인자 변경 및 비교를 통해 최선의 모델 선정
- 
+
 #### 1.5. 웹 서비스 구현
 - AWS EC2(t2.medium, ubuntu) 기반
 - Nginx, uwsgi 사용하여 웹 서버 구축
 - Flask와 Redis를 사용하여 모델 서버 구축
- 
+
 ## 2. Puri attention
  - 실제 코드에서는 단어 단위로 tokenize 되지는 않으나, 편의상 단어 토큰이라 표현하였습니다.
 
@@ -72,7 +72,7 @@ Purifier 서비스는 [google mutilingual BERT model](https://github.com/google-
 
 #### 2.3. puri attention
 - puri attention layer의 첫번째 핵심은 모든 문맥 정보를 담고있는 CLS 토큰으로 아직 문맥 정보들이 뒤섞이지 않은 임베딩 output을 바라보게(유사도를 구하게) 하는데에 있습니다.(즉, Q는 CLS토큰, K와 V는 임베딩 output이 됩니다)
-    
+  
     ```
     [CLS token] matmul [embedding output] = Attention Score
     Attention Prob = softmax(Attention Score)
@@ -98,18 +98,21 @@ Purifier 서비스는 [google mutilingual BERT model](https://github.com/google-
 
 - 문장 전체를 봤을때 욕설 판단이 1로 나오는 경우(욕설이 있는 문장)에만 마스킹 알고리즘이 적용됩니다.
 - 핵심은 puri attention에서 나오는 Attention Prob을 비교하여 가장 높은 값을 욕설이라 판단하는 것입니다.
-   
+  
 - BERT의 tokenize 방식이 단어 혹은 형태소 단위가 아니라, wordpiece 방식으로 구성되어 있어 한 토큰이 일정 확률을 넘어선 경우, 그 토큰을 포함하고 있는 단어 전체를 마스킹 하는 방식으로 구현하였습니다.
-   
+  
 - 가장 높은 확률의 토큰이 포함된 단어를 마스킹하고, 욕설 판단이 0(욕설이 없는 문장)이 될때까지 같은 과정을 반복합니다.
 
 ![example_show](/img/example.gif)
- 
+
 ## 4. 코드 간단 사용법
-    ```
-    import purifier_cls as puri
-    from final_modeling import BertForSequenceClassification
-    
-    model = BertForSequenceClassification.from_pretrained('./data/', num_labels=2)
-    puri.single_sentence_masking_percent("안녕하세요 씨발 반가워요!", model)
-    ```
+~~~python
+```
+import run_purifier as puri
+from modeling_purifier import BertForSequenceClassification
+
+model = BertForSequenceClassification.from_pretrained('./data/', num_labels=2)
+text, result = puri.single_sentence_masking_percent("안녕하세요 씨발 반가워요!", model)
+print(text, result)
+```
+~~~
